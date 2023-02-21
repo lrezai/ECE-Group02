@@ -76,7 +76,7 @@ class PurePursuitController():
         #   - subscribes to the topic <self.control_topic>
         #   - has message type <ServoMsg> (racecar_msgs.msg.Odometry) 
         #   - with queue size 1
-        self.control_pub = None # TO BE FILLED
+        self.control_pub = rospy.Publisher(self.control_topic, ServoMsg, queue_size = 1)
         ########################### END OF TODO 1#################################
         
             
@@ -93,6 +93,7 @@ class PurePursuitController():
         #   - has message type <Odometry> (nav_msgs.msg.Odometry) 
         #   - with callback function <self.odometry_callback>, which has already been implemented
         #   - with queue size 1
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size = 1)
         ########################### END OF TODO 2#################################
         
     def odometry_callback(self, odom_msg: Odometry):
@@ -154,6 +155,13 @@ class PurePursuitController():
         # 2. Set the header time to the current time
         # 3. Set the throttle and steering angle to the servo message
         # 4. Publish the servo message
+        
+        msg = ServoMsg()
+        msg.header.stamp = rospy.get_rostime()
+        msg.throttle = throttle
+        msg.steer = steer
+        self.control_pub.publish(msg)
+        
         
         ########################### END OF TODO 4 #################################
 
