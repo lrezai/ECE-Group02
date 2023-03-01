@@ -124,8 +124,8 @@ class PurePursuitController():
         #   and create a 3-dim numpy array [x,y,1]
         # 3. add the goal to the buffer (self.goal_buffer)
         
-        goal_x = np.nan # TO BE FILLED
-        goal_y = np.nan # TO BE FILLED
+        arr = np.array([goal_msg.pose.position.x, goal_msg.pose.position.y, 1])
+        self.goal_buffer.writeFromNonRT(arr)
         
         ########################### END OF TODO 3 #################################
         # Log the goal to the console using "rospy.loginfo"
@@ -196,13 +196,21 @@ class PurePursuitController():
 
                     ########################## TODO: 5. Finish the pure pursuit controlle ###################
                     # 1. Check if the goal is close enough
-                    #
+                    
+                    if dis2goal <= 0.1:
+                    
                     # 2. if that is the case, stop the car by apply a negative acceleration (eg: -1 m/s^2)
                     #   and zero steering angle. Then, continue to the next iteration
-                    #
+                    
+                        self.publish_control(self,-1,0,state_cur)
+                        continue
+                
                     # 3. If the target is behind the car, apply maximum steering angle 
                     #   and set the reference_velocity to vel_max
-                    # 
+                elif alpha > np.pi / 2 and alpha < -0.5 * np.pi:
+                    steer = self.max_steer
+                    vel_ref = self.max_vel
+                    
                     # 4. Otherwise, 
                     #   - apply a pure pursuit controller for steering by assuming 
                     #       the reference path a straight line between the car and the goal
@@ -210,12 +218,29 @@ class PurePursuitController():
                     #   - set the reference_velocity to the minimum of vel_max and (dis2goal-self.stop_distance)
                     #   Detail Explanation: 
                     #   https://thomasfermi.github.io/Algorithms-for-Automated-Driving/Control/PurePursuit.html
-                    #
+                    
+                else:
+                    l_d = min(self.ld_max, dis2goal)
+                    
+                    # Find the target point TP as the intersection of the desired path with a circle of radius
+                    # l_d around the rear wheel
+                    tp = np.array([l_d * np.cos(alpha), l_d * np.sin(alpha), 1])
+                    
+                    # Find the new alpha
+                    alpha = np.arctan2(tp[0], tp[1])
+                    
+                    # Find gamma
+                    gamma = np.arctan(2 * self.wheel_base * np.sin(alpha)/l_d)
+                    
+                    # setting the reference velocity
+                    vel_ref = min(self.max_vel, (dis2goal - self.stop_distance))
                     # 5. clip the steering angle between "-self.steer_max" and "self.steer_max"
+                    
+                    steer = min(max(gamma, -1 * self.max_steer), self.max_steer)
                     # 6. apply the simple proportional controller for the acceleration to track the reference_velocity
                     
-                    accel = 0 # TO BE FILLED 
-                    steer = 0 # TO BE FILLED
+                    accel = self.throttle_gain * (vel_ref - vel_cur)
+                    
                     ########################### END OF TODO 5 ###########################################
                     
                     # publish the control
