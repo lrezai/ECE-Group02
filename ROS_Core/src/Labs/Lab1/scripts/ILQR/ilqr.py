@@ -232,6 +232,7 @@ class ILQR():
 		
 		########################### #END of TODO 1 #####################################
 
+
 		t_process = time.time() - t_start
 		solver_info = dict(
 				t_process=t_process, # Time spent on planning
