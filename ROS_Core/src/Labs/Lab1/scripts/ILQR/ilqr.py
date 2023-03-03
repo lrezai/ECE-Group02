@@ -242,37 +242,31 @@ class ILQR():
 		for i in range(steps):
 			K_closed_loop, k_open_loop, reg = self.backward_pass(X, U, reg, path_refs, obs_refs)
 			changed = False
-   
 			for alpha in self.alphas:
-				X_new, U_new = self.roll_out(0,0,0,0,0,0)
-       			#X_new, U_new = self.roll_out(X, J, U, K_closed, k_openloop, alpha)
+				X_new, U_new = self.roll_out(X, J, U, K_closed_loop, k_open_loop, alpha)
 				path_refs, obs_refs = self.get_references(X_new)
 				J_new = self.cost.get_traj_cost(X_new, U_new, path_refs, obs_refs)
-    
-		if J_new <= J:
-			if np.abs(J - J_new) < self.tol:
-				converged = True
-				J = J_new
-				X = X_new
-				U = U_new
-				changed = True
-				#break
-		if not changed:
-			print("line search failed with reg = ", reg, " at step ", i)
-			#break
-		if converged:
-			print("converged after ", i, " steps.")
-			#break
-
+				if J_new <= J:
+					if np.abs(J - J_new) < self.tol:
+						converged = True
+					J = J_new
+					X = X_new
+					U = U_new
+					changed = True
+				break
+			if not changed:
+				print("line search failed with reg = ", reg, " at step ", i)
+				break
+			if converged:
+				print("converged after ", i, " steps. ")
 		trajectory = X
 		controls = U
-
 		t_process = time.time() - t_start
 		solver_info = dict(
 			t_process=t_process,  # Time spent on planning
 			trajectory=trajectory,
 			controls=controls,
-						status=changed,  # TODO: Fill this in
+			status=changed,  # TODO: Fill this in
 			K_closed_loop=K_closed_loop,  # TODO: Fill this in
 			k_open_loop=k_open_loop  # TODO: Fill this in
 			# Optional TODO: Fill in other information you want to return
@@ -284,7 +278,6 @@ class ILQR():
 		# for alpha in alphas:
 		X = np.zeros_like(init_state)
 		U = np.zeros_like(controls)
-
 		X[:, 0] = init_state[:, 0]
 		T = init_state.shape[1]
 		for t in range(T-1):
@@ -302,7 +295,7 @@ class ILQR():
 		# return X, U, J, path_refs, obs_refs
 
 	def backward_pass(self, X, U, reg, path_refs, obs_refs):
-		q, r, Q, R, H = self.get_derivatives_np(X, U, path_refs, obs_refs)
+		q, r, Q, R, H = self.cost.get_derivatives_np(X, U, path_refs, obs_refs)
 		A, B = self.dyn.get_jacobian_np(X, U)
 		T = X.shape[1]
 		k_open_loop = np.zeros((2, T))
@@ -310,43 +303,38 @@ class ILQR():
 
 		# 2. Initialize pT = qT and PT = QT
 		p = q[:, T-1]
-		P = Q[:, T-1]
+		P = Q[:, :, T-1]
 
 		# 3. t = T-1
 		t = T-2
 
 		# 4. while t ≥ 0
 		while t >= 0:
-
-			# 6. Done below
 			Q_x = q[:, t] + A[:, :, t].T @ p
 			Q_u = r[:, t] + B[:, :, t].T @ p
 			Q_xx = Q[:, :, t] + A[:, :, t].T @ P @ A[:, :, t]
 			Q_uu = R[:, :, t] + B[:, :, t].T @ P @ B[:, :, t]
 			Q_ux = H[:, :, t] + B[:, :, t].T @ P @ A[:, :, t]
-
 		   # 7. Compute regulatrized Hessian
 			reg_matrix = reg*np.eye(5)
 			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ (P+reg_matrix) @ B[:, :, t]
 			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ (P+reg_matrix) @ A[:, :, t]
-
 		   # 8. If Q_uu NOT positive definite
-		if not np.all(np.linalg.eigvals(Q_uu_reg) > 0) and reg < 1e5:
+			if (not np.all(np.linalg.eigvals(Q_uu_reg) > 0) and reg < 1e5):
 				reg *= self.reg_scale_up
 				t = T-2
-				#continue
-			# 13. Compute optimal control gain
-		Q_uu_reg_inv = np.linalg.inv(Q_uu_reg)
-		# Calculate policy
-		k = -Q_uu_reg_inv @ Q_u
-		K = -Q_uu_reg_inv @ Q_ux_reg
-		k_open_loop[:, t] = k          
-		K_closed_loop[:, :, t] = K
+				continue
+
+			Q_uu_reg_inv = np.linalg.inv(Q_uu_reg)
+			k = -Q_uu_reg_inv @ Q_u
+			K = -Q_uu_reg_inv @ Q_ux_reg
+			k_open_loop[:, t] = k          
+			K_closed_loop[:, :, t] = K
 
 		   # Computing derivative and Hessian of V_t
-		p = Q_x + K.T @ Q_uu @ k + K.T@Q_u + Q_ux.T@k
-		P = Q_xx + K.T @ Q_uu @ K + K.T@Q_ux + Q_ux.T@K
-		t -= 1
+			p = Q_x + K.T @ Q_uu @ k + K.T@Q_u + Q_ux.T@k
+			P = Q_xx + K.T @ Q_uu @ K + K.T@Q_ux + Q_ux.T@K
+			t -= 1
 
 		reg = max(self.reg_min, reg/self.reg_scale_down)
 		return K_closed_loop, k_open_loop, reg
