@@ -424,32 +424,44 @@ class TrajectoryPlanner():
             ###############################
             
             # take current time and subtract from last replan time
-            curr_time = rospy.get_rostime().to_sec()
-            t_since_replan = curr_time - t_last_replan
+           
             # Step 1
-            if self.plan_state_buffer.new_data_available and (t_since_replan > self.replan_dt) and self.planner_ready:
-                # Step 2
-                curr_state = self.plan_state_buffer.readFromRT()
+            if self.plan_state_buffer.new_data_available and self.planner_ready:
+                
+                # Get current state from plan_state_buffer
+                state = self.plan_state_buffer.readFromRT()
+                
+                curr_time = state[-1]
+                dt = curr_time - t_last_replan
+                
+                if dt < self.replan_dt:
+                    continue
+                
                 prev_policy = self.policy_buffer.readFromRT()
-                if not prev_policy is None:
-                    curr_controls = prev_policy.get_ref_controls(t_last_replan)
+                
+                if prev_policy is not None:
+                    initial_controls = prev_policy.get_ref_controls(curr_time)
                 else:
-                    curr_controls = None
+                    initial_controls = None
+                    
                 if self.path_buffer.new_data_available:
                     updated_path = self.path_buffer.readFromRT()
                     self.planner.update_ref_path(updated_path)    
-                ilqr_dict = self.planner.plan(curr_state,curr_controls)
+                ilqr_dict = self.planner.plan(state[:-1], initial_controls)
+                
                 # Step 3
                 if ilqr_dict['status'] == 0:
                     new_policy = Policy(ilqr_dict['trajectory'],
                                         ilqr_dict['controls'],
                                         ilqr_dict['K_closed_loop'],
-                                        curr_state[-1],
+                                        curr_time,
                                         self.planner.dt,
                                         self.planner.T
                                         )
                     self.policy_buffer.writeFromNonRT(new_policy)
                     self.trajectory_pub.publish(new_policy.to_msg())
+                    
+                    t_last_replan = curr_time
 
             '''
             Implement the receding horizon planning thread
@@ -479,4 +491,3 @@ class TrajectoryPlanner():
             ###############################
             #### END OF TODO #############
             ###############################
-            time.sleep(0.01)
