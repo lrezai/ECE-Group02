@@ -210,9 +210,13 @@ class TrajectoryPlanner():
         ###############################
         # Implement your control law here using ILQR policy
         # Hint: make sure that the difference in heading is between [-pi, pi]
-        
-        accel = 0 # TO BE REPLACED
-        steer_rate = 0 # TO BE REPLACED
+        U = np.zeros_like(u_ref)
+        dx = x - x_ref
+        dx[3] = np.arctan2(np.sin(dx[3]), np.cos(dx[3]))
+        U = u_ref + K_closed_loop @ dx
+
+        accel = U[0] # TO BE REPLACED
+        steer_rate = U[1] # TO BE REPLACED
 
         ##### END OF TODO ##############
 
@@ -373,7 +377,7 @@ class TrajectoryPlanner():
                 # stop when the progress is not increasing
                 while (progress - prev_progress)*new_path.length > 1e-3: # stop when the progress is not increasing
                     nominal_trajectory.append(state)
-                    new_plan = self.planner.plan(state, None, verbose=False)
+                    new_plan = self.planner.plan(state, None)
                     nominal_controls.append(new_plan['controls'][:,0])
                     K_closed_loop.append(new_plan['K_closed_loop'][:,:,0])
                     
@@ -440,6 +444,34 @@ class TrajectoryPlanner():
                 - Write the new policy to the policy buffer using <self.policy_buffer.writeFromNonRT>
                 - Publish the new policy for RVIZ visualization
                     for example: self.trajectory_pub.publish(new_policy.to_msg())       
+            '''
+            '''
+            # take current time and subtract from last replan time
+            curr_time = rospy.get_rostime().to_sec()
+            t_since_replan = curr_time - t_last_replan
+            # Step 1
+            if self.plan_state_buffer.new_data_available and (t_since_replan > self.replan_dt) and self.planner_ready:
+                # Step 2
+                curr_state = self.plan_state_buffer.readFromRT()
+                prev_policy = self.policy_buffer.readFromRT()
+                if not prev_policy  None:
+                    curr_controls = prev_policy.get_ref_controls(t_last_replan)
+                if self.path_buffer.new_data_available:
+                    updated_path = self.path_buffer.readFromRT()
+                    reference_path = self.planner.update_ref_path(updated_path)
+                    ilqr_obj = ILQR()
+                    ilqr_dict = ilqr_obj.plan(curr_state,curr_controls)
+                    # Step 3
+                    if ilqr_dict['status'] == 0:
+                        new_policy = Policy(curr_state,
+                                            curr_controls,
+                                            ilqr_obj.backward_pass[0],
+                                            curr_time,
+                                            self.planner.dt,
+                                            curr_controls.shape[1]
+                                            )
+                        self.policy_buffer.writeFromNonRT(new_policy)
+                        self.trajectory_pub.publish(new_policy.to_msg())
             '''
             ###############################
             #### END OF TODO #############
