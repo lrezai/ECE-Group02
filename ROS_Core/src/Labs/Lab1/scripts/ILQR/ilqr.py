@@ -240,16 +240,15 @@ class ILQR():
 		U = controls
 		converged = False
 		for i in range(steps):
-			K_closed_loop, k_open_loop, reg = self.backward_pass(X, U, reg, path_refs, obs_refs
-                                                        )
+			K_closed_loop, k_open_loop, reg = self.backward_pass(X, U, reg, path_refs, obs_refs)
 			changed = False
+   
 			for alpha in self.alphas:
-				X_new, U_new = [0], [0]
-
-	   # X_new, U_new = self.roll_out(X, J, U, K_closed_loop, k_open_loop, alpha)
-	# J_new= self.get_traj_cost(X_new, U_new, )
+				X_new, U_new = self.roll_out(0,0,0,0,0,0)
+       			#X_new, U_new = self.roll_out(X, J, U, K_closed, k_openloop, alpha)
 				path_refs, obs_refs = self.get_references(X_new)
 				J_new = self.cost.get_traj_cost(X_new, U_new, path_refs, obs_refs)
+    
 		if J_new <= J:
 			if np.abs(J - J_new) < self.tol:
 				converged = True
