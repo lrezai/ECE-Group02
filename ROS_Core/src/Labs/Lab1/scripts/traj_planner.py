@@ -139,8 +139,7 @@ class TrajectoryPlanner():
     def static_obs_callback(self, marker_msg):
         for obstacle in marker_msq.markers:
             id, verticles = get_obstacle_vertices(obstacles)
-            if id == key:
-                static_obstacle_dict[key] = verticles
+            static_obstacle_dict[id] = verticles
                 
     
     def setup_service(self):
