@@ -30,6 +30,10 @@ class TrajectoryPlanner():
     '''
     Main class for the Receding Horizon trajectory planner
     '''
+    
+    # Lab 2: Initialize empty dictionary
+    
+    static_obstacle_dict = {}
 
     def __init__(self):
         # Indicate if the planner is used to generate a new trajectory
@@ -69,6 +73,9 @@ class TrajectoryPlanner():
         # Read ROS topic names to subscribe 
         self.odom_topic = get_ros_param('~odom_topic', '/slam_pose')
         self.path_topic = get_ros_param('~path_topic', '/Routing/Path')
+        
+        # Lab 2: Read ROS static obstacles to subscribe
+        self.static_obs_topic = get_ros_param('~static_obs_topic', '/Obstacles/Static')
         
         
         # Read ROS topic names to publish
@@ -124,7 +131,18 @@ class TrajectoryPlanner():
         '''
         self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=10)
         self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=10)
+        
+        # Lab 2: subscribe to topic created in step 1
+        self.static_obs_sub = rospy.Subscriber(self.static_obs_topic, MarkerArray, self.static_obs_callback, queue_size=10)
 
+    # Lab 2: define callback for static obstacle subscriber 
+    def static_obs_callback(self, marker_msg):
+        for obstacle in marker_msq.markers:
+            id, verticles = get_obstacle_vertices(obstacles)
+            if id == key:
+                static_obstacle_dict[key] = verticles
+                
+    
     def setup_service(self):
         '''
         Set up ros service
@@ -427,6 +445,12 @@ class TrajectoryPlanner():
         rospy.loginfo('Receding Horizon Planning thread started waiting for ROS service calls...')
         t_last_replan = 0
         while not rospy.is_shutdown():
+            
+            # Lab 2: passing static obstacles into ILQR
+            obstacles_list = []
+            obstacles_list = list(static_obstacle_dict.items())
+            self.planner.update_obstacles(obstacles_list)
+            
             ###############################
             #### TODO: Task 3 #############
             ###############################
